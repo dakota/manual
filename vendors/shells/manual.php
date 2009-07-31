@@ -119,7 +119,9 @@ class ManualShell extends Shell {
 			// tidy -asxhtml -m  -i -w 10000 the-manual_work 2>/dev/null
 			return tidy_get_output($tidy);
 		} else {
-			
+			App::import('Vendor', 'cookbook.LawedHtml', array('file' => 'LawedHtml' . DS . 'lawed.lib.php'));
+			$law = new LawedHtml($tempZipPath);
+			return $law->htmLawed($text);
 		}
 	}
 
