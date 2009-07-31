@@ -16,15 +16,11 @@ class ManualShell extends Shell {
 		preg_replace('/<link [.*]><\/link>/', '', $manual);
 		$this->generate('3.remove-script-link-tags', $manual);
 
-		$this->generate('3.remove-z', $manual);
-
 		$this->out("Removed formatted code");
 		preg_replace('/[^.*]<li><code>[.*$]/','', $manual);
 		preg_replace('/[^.*]<li class="even"><code>[.*$]/', '', $manual);
 		$this->generate('4.remove-formatted-code', $manual);
 
-		$this->generate('4.remove-z', $manual);
-		
 		// delete last scripts
 		$manual = $this->removeLines($manual);
 		$this->generate('5.remove-lines', $manual);
@@ -35,7 +31,6 @@ class ManualShell extends Shell {
 		preg_replace('/<ul class="node-options">[.*]<\/ul>/', '', $manual);
 		$this->generate('6.remove-node-options', $manual);
 
-		$this->generate('6.remove-z', $manual);
 		// preg_replace('<li><a href="\/edit\/[^"]*">Edit<\/a><\/li>', '', $manual);
 		// preg_replace('<li><a href="[^"]*" class="show-comment">Comments[^<]*<\/a><\/li>', '', $manual);
 		// preg_replace('<li><a href="\/history\/[^"]*">History<\/a><\/li>', '', $manual);
@@ -48,19 +43,15 @@ class ManualShell extends Shell {
 		preg_replace('/<div class="comment"><a href="\/comments\/[^"]*">See comments for this section<\/a><\/div>/', '', $manual);
 		$this->generate('7.remove-comments', $manual);
 
-		$this->generate('7.remove-z', $manual);
-
 		$manual = $this->removeIllegalCharacters($manual);
 		$this->generate('8.remove-illegal-characters', $manual);
 		$manual = $this->tidyMarkup($manual);
 
-		$this->generate('8.remove-z', $manual);
+		$this->generate('8.tidyMarkup', $manual);
 		
 		$this->out("Clean #header");
 		preg_replace('/\<div id="container"\>.*\<div id="body"\>/', '', $manual);
 		$this->generate('9.remove-header', $manual);
-
-		$this->generate('9.remove-z', $manual);
 
 		$this->out("Clean #footer");
 		preg_replace('/\<span class="prev"\>.*\<div class="clear"\>/', '', $manual);
@@ -69,8 +60,6 @@ class ManualShell extends Shell {
 		$this->out("Remove 1.1 manual link");
 		preg_replace('/<p><strong><a href="\/305\/the-manual">Click here for the CakePHP 1.1.x version of the manual<\/a><\/strong><\/p>/', '', $manual);
 		$this->generate('11.remove-11-link', $manual);
-
-		$this->generate('11.remove-z', $manual);
 
 		$manual = $this->formatImages($manual);
 		$this->generate('12.format-images', $manual);
