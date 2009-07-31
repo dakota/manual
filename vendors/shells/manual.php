@@ -4,27 +4,38 @@ class ManualShell extends Shell {
 	function main() {
 		$this->out("Getting a copy of the manual...");
 		$manual = file_get_contents('http://book.cakephp.org/complete/3');
+		$this->generate('1.copy', $manual);
 
 		$this->out("Create a working copy");
 		$this->out("Set content-type to ISO-8859-1");
 		preg_replace('/content="text\/html; charset=UTF-8"/', 'content="text\/html; charset=ISO-8859-1"', $manual);
+		$this->generate('2.content-type', $manual);
+
 		$this->out("Remove <script> and <link> tags");
 		preg_replace('/<script [.*]><\/script>/', '', $manual);
 		preg_replace('/<link [.*]><\/link>/', '', $manual);
-		$manual = $this->tidyMarkup($manual);
-		
+		$this->generate('3.remove-script-link-tags', $manual);
+
+		$this->generate('3.remove-z', $manual);
+
 		$this->out("Removed formatted code");
 		preg_replace('/[^.*]<li><code>[.*$]/','', $manual);
 		preg_replace('/[^.*]<li class="even"><code>[.*$]/', '', $manual);
-		$manual = $this->tidyMarkup($manual);
+		$this->generate('4.remove-formatted-code', $manual);
+
+		$this->generate('4.remove-z', $manual);
 		
 		// delete last scripts
+		$manual = $this->removeLines($manual);
+		$this->generate('5.remove-lines', $manual);
 		// 7 lines before the last line
 		
 		// delete node options
 		$this->out("Remove node options");
 		preg_replace('/<ul class="node-options">[.*]<\/ul>/', '', $manual);
-		$manual = $this->tidyMarkup($manual);
+		$this->generate('6.remove-node-options', $manual);
+
+		$this->generate('6.remove-z', $manual);
 		// preg_replace('<li><a href="\/edit\/[^"]*">Edit<\/a><\/li>', '', $manual);
 		// preg_replace('<li><a href="[^"]*" class="show-comment">Comments[^<]*<\/a><\/li>', '', $manual);
 		// preg_replace('<li><a href="\/history\/[^"]*">History<\/a><\/li>', '', $manual);
@@ -35,43 +46,63 @@ class ManualShell extends Shell {
 		$this->out("Remove comments");
 		//preg_replace('<div class="comments".*<\/div><\/div>', '', $manual);
 		preg_replace('/<div class="comment"><a href="\/comments\/[^"]*">See comments for this section<\/a><\/div>/', '', $manual);
-		$manual = $this->tidyMarkup($manual);
+		$this->generate('7.remove-comments', $manual);
+
+		$this->generate('7.remove-z', $manual);
 
 		$manual = $this->removeIllegalCharacters($manual);
+		$this->generate('8.remove-illegal-characters', $manual);
 		$manual = $this->tidyMarkup($manual);
+
+		$this->generate('8.remove-z', $manual);
 		
 		$this->out("Clean #header");
 		preg_replace('/\<div id="container"\>.*\<div id="body"\>/', '', $manual);
-		$manual = $this->tidyMarkup($manual);
+		$this->generate('9.remove-header', $manual);
+
+		$this->generate('9.remove-z', $manual);
 
 		$this->out("Clean #footer");
 		preg_replace('/\<span class="prev"\>.*\<div class="clear"\>/', '', $manual);
+		$this->generate('10.remove-footer', $manual);
 
 		$this->out("Remove 1.1 manual link");
 		preg_replace('/<p><strong><a href="\/305\/the-manual">Click here for the CakePHP 1.1.x version of the manual<\/a><\/strong><\/p>/', '', $manual);
-		$manual = $this->tidyMarkup($manual);
+		$this->generate('11.remove-11-link', $manual);
+
+		$this->generate('11.remove-z', $manual);
 
 		$manual = $this->formatImages($manual);
-		$manual = $this->tidyMarkup($manual);
+		$this->generate('12.format-images', $manual);
+
 		$manual = $this->styleHeaders($manual);
-		$manual = $this->tidyMarkup($manual);
+		$this->generate('13.style-headers', $manual);
+
 		$manual = $this->styleTables($manual);
-		$manual = $this->tidyMarkup($manual);
+		$this->generate('14.style-tables', $manual);
+
 		$manual = $this->styleDefinitionLists($manual);
-		$manual = $this->tidyMarkup($manual);
+		$this->generate('15.style-dls', $manual);
+
 		$manual = $this->styleCodeBlocks($manual);
-		$manual = $this->tidyMarkup($manual);
+		$this->generate('16.style-codeblocks', $manual);
+
 		$manual = $this->formatForScreen($manual);
-		$manual = $this->tidyMarkup($manual);
+		$this->generate('17.format-screen', $manual);
+
 		$manual = $this->styleInlineCode($manual);
-		$manual = $this->tidyMarkup($manual);
+		$this->generate('18.style-inline-code', $manual);
+
 		$this->out("Style methods");
 		preg_replace('/ class="method">/', ' class="method"><strong><code><font size="2">', $manual);
-		$manual = $this->tidyMarkup($manual);
+		$this->generate('19.style-methods', $manual);
+
 		$manual = $this->styleWarnings($manual);
-		$manual = $this->tidyMarkup($manual);
+		$this->generate('20.style-warnings', $manual);
+
 		$manual = $this->highlight($manual);
-		
+		$this->generate('21.highlight', $manual);
+
 		$f = new File(APP . 'tmp' . DS . 'manual' . DS.'test.html', true);
 		$f->write($manual);
 		$f->close();
@@ -80,7 +111,31 @@ class ManualShell extends Shell {
 	function help() {
 		
 	}
-	
+
+	function generate($name, $text) {
+		$f = new File(APP . 'tmp' . DS . 'manual' . DS . $name . '.html', true);
+		$f->write($text);
+		$f->close();
+	}
+
+	function removeLines($text) {
+		$f = new File(APP . 'tmp' . DS . 'manual' . DS.'temp.html', true);
+		$f->write($text);
+		// read into array
+		$array = explode("\n", $f->read());
+		$f->close();
+		$lines = count($array);
+		// remove last nine lines
+		for($i = 0; $i < 9; $i++) {
+			unset($array[$lines-3]);
+			$lines = count($array);
+		}
+		// reindex array
+		$array = array_values($array);
+		// return the text
+		return implode($array);
+	}
+
 	function removeIllegalCharacters($text) {
 		$this->out("Replace illegal chars");
 		preg_replace('/—/', '-', $text);
@@ -112,17 +167,27 @@ class ManualShell extends Shell {
 		return $text;
 	}
 
-	function tidyMarkup($text) {
-		if (function_exists('tidy_parse_string')){
+	function tidyMarkup($text, $lawed = false) {
+		if (function_exists('tidy_get_output')){
 			$this->out("Tidy markup");
-			$tidy = tidy_parse_string($text);
+			$config = array(
+				'indent'=> true,
+				'output-xml' => true,
+				'markup' => true,
+				'wrap' => '1000');
+
+			// Tidy
+			$tidy = new tidy();
+			$tidy->parseString($text, $config, 'utf8');
+			$tidy->cleanRepair();
 			// tidy -asxhtml -m  -i -w 10000 the-manual_work 2>/dev/null
 			return tidy_get_output($tidy);
-		} else {
+		} elseif ($lawed == true) {
 			App::import('Vendor', 'cookbook.LawedHtml', array('file' => 'LawedHtml' . DS . 'lawed.lib.php'));
 			$law = new LawedHtml($tempZipPath);
 			return $law->htmLawed($text);
 		}
+		return $text;
 	}
 
 	function styleHeaders($text) {
