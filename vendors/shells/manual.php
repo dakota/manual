@@ -118,6 +118,8 @@ class ManualShell extends Shell {
 			$tidy = tidy_parse_string($text);
 			// tidy -asxhtml -m  -i -w 10000 the-manual_work 2>/dev/null
 			return tidy_get_output($tidy);
+		} else {
+			
 		}
 	}
 
