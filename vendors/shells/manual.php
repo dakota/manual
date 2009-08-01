@@ -1,100 +1,49 @@
 <?php
 class ManualShell extends Shell {
 
+	var $debug = true;
+
 	function main() {
-		$this->out("Getting a copy of the manual...");
-		$manual = file_get_contents('http://book.cakephp.org/complete/3');
-		$this->generate('1.copy', $manual);
-
+		$manual = $this->getManual(false);
+		
 		$this->out("Create a working copy");
-		$this->out("Set content-type to ISO-8859-1");
-		preg_replace('/content="text\/html; charset=UTF-8"/', 'content="text\/html; charset=ISO-8859-1"', $manual);
-		$this->generate('2.content-type', $manual);
+		$this->generate('01.copy', $manual);
 
-		$this->out("Remove <script> and <link> tags");
-		preg_replace('/<script [.*]><\/script>/', '', $manual);
-		preg_replace('/<link [.*]><\/link>/', '', $manual);
-		$this->generate('3.remove-script-link-tags', $manual);
-
-		$this->out("Removed formatted code");
-		preg_replace('/[^.*]<li><code>[.*$]/','', $manual);
-		preg_replace('/[^.*]<li class="even"><code>[.*$]/', '', $manual);
-		$this->generate('4.remove-formatted-code', $manual);
-
-		// delete last scripts
+		$manual = $this->setContentType($manual);
+		$manual = $this->removeScriptLinkTags($manual);
+		// This does nothing
+		$manual = $this->removeFormattedCode($manual);
 		$manual = $this->removeLines($manual);
-		$this->generate('5.remove-lines', $manual);
-		// 7 lines before the last line
-		
-		// delete node options
-		$this->out("Remove node options");
-		preg_replace('/<ul class="node-options">[.*]<\/ul>/', '', $manual);
-		$this->generate('6.remove-node-options', $manual);
-
-		// preg_replace('<li><a href="\/edit\/[^"]*">Edit<\/a><\/li>', '', $manual);
-		// preg_replace('<li><a href="[^"]*" class="show-comment">Comments[^<]*<\/a><\/li>', '', $manual);
-		// preg_replace('<li><a href="\/history\/[^"]*">History<\/a><\/li>', '', $manual);
-		// preg_replace('<li><a href="\/view\/[^"]*">View just this section<\/a><\/li>', '', $manual);
-		// preg_replace('<li class="flag pending"><a href="[^"]*">there is a pending change for this section<\/a><\/li>', '', $manual);
-
-		// delete "See comments"
-		$this->out("Remove comments");
-		//preg_replace('<div class="comments".*<\/div><\/div>', '', $manual);
-		preg_replace('/<div class="comment"><a href="\/comments\/[^"]*">See comments for this section<\/a><\/div>/', '', $manual);
-		$this->generate('7.remove-comments', $manual);
-
+		$manual = $this->removeNodeOptions($manual);
+		$manual = $this->removeComments($manual);
 		$manual = $this->removeIllegalCharacters($manual);
-		$this->generate('8.remove-illegal-characters', $manual);
 		$manual = $this->tidyMarkup($manual);
-
-		$this->generate('8.tidyMarkup', $manual);
-		
-		$this->out("Clean #header");
-		preg_replace('/\<div id="container"\>.*\<div id="body"\>/', '', $manual);
-		$this->generate('9.remove-header', $manual);
-
-		$this->out("Clean #footer");
-		preg_replace('/\<span class="prev"\>.*\<div class="clear"\>/', '', $manual);
-		$this->generate('10.remove-footer', $manual);
-
-		$this->out("Remove 1.1 manual link");
-		preg_replace('/<p><strong><a href="\/305\/the-manual">Click here for the CakePHP 1.1.x version of the manual<\/a><\/strong><\/p>/', '', $manual);
-		$this->generate('11.remove-11-link', $manual);
-
+		$manual = $this->rollingCleanup($manual);
+		$manual = $this->tidyMarkup($manual, false, true);
+		$manual = $this->cleanHeader($manual);
+		// This does nothing
+		$manual = $this->cleanFooter($manual);
+		// This does nothing
+		$manual = $this->removeManualLink($manual);
 		$manual = $this->formatImages($manual);
-		$this->generate('12.format-images', $manual);
-
 		$manual = $this->styleHeaders($manual);
-		$this->generate('13.style-headers', $manual);
-
 		$manual = $this->styleTables($manual);
-		$this->generate('14.style-tables', $manual);
-
 		$manual = $this->styleDefinitionLists($manual);
-		$this->generate('15.style-dls', $manual);
-
 		$manual = $this->styleCodeBlocks($manual);
-		$this->generate('16.style-codeblocks', $manual);
-
 		$manual = $this->formatForScreen($manual);
-		$this->generate('17.format-screen', $manual);
-
 		$manual = $this->styleInlineCode($manual);
-		$this->generate('18.style-inline-code', $manual);
-
-		$this->out("Style methods");
-		preg_replace('/ class="method">/', ' class="method"><strong><code><font size="2">', $manual);
-		$this->generate('19.style-methods', $manual);
-
+		$manual = $this->styleMethods($manual);
 		$manual = $this->styleWarnings($manual);
-		$this->generate('20.style-warnings', $manual);
-
 		$manual = $this->highlight($manual);
-		$this->generate('21.highlight', $manual);
+
+		// Insert some css here...
+		$manual = preg_replace('/<script .*>.*<\/script>/', '', $manual);
 
 		$f = new File(APP . 'tmp' . DS . 'manual' . DS.'test.html', true);
 		$f->write($manual);
 		$f->close();
+		
+		$this->out("DONE! You can find a copy of the manual in your tmp/manual folder.");
 	}
 	
 	function help() {
@@ -102,63 +51,209 @@ class ManualShell extends Shell {
 	}
 
 	function generate($name, $text) {
-		$f = new File(APP . 'tmp' . DS . 'manual' . DS . $name . '.html', true);
-		$f->write($text);
-		$f->close();
+		if ($this->debug) {
+			$f = new File(APP . 'tmp' . DS . 'manual' . DS . $name . '.html', true);
+			$f->write($text);
+			$f->close();
+		}
 	}
 
-	function removeLines($text) {
-		$f = new File(APP . 'tmp' . DS . 'manual' . DS.'temp.html', true);
-		$f->write($text);
-		// read into array
-		$array = explode("\n", $f->read());
-		$f->close();
-		$lines = count($array);
-		// remove last nine lines
-		for($i = 0; $i < 9; $i++) {
-			unset($array[$lines-3]);
-			$lines = count($array);
+	function checkManualFolder() {
+		$tempHandler = new Folder();
+		$tempPath = trim(TMP);
+		$manualPath = trim(TMP . 'manual');
+
+		$tempHandler->cd($tempPath);
+		$temp = $tempHandler->ls();
+		foreach ($temp[0] as $tempFolder) {
+			if ($tempFolder !== 'manual') {
+				$tempHandler->create($manualPath);
+			}
 		}
-		// reindex array
-		$array = array_values($array);
-		// return the text
+	}
+
+	function getManual($download = true) {
+		$this->checkManualFolder();
+		if ($download) {
+			$this->out("Downloading a copy of the manual...");
+			$manual = file_get_contents('http://book.cakephp.org/complete/3');
+			$f = new File(APP . 'tmp' . DS . 'manual' . DS.'pristine.html', true);
+			$f->write($manual);
+			$f->close();
+		} else {
+			$this->out("Getting a copy of the manual...");
+			$f = new File(APP . 'tmp' . DS . 'manual' . DS.'pristine.html', true);
+			$manual = $f->read();
+			if (empty($manual)) {
+				$this->out("Temporary copy was empty! Downloading a copy of the manual...");
+				$manual = file_get_contents('http://book.cakephp.org/complete/3');
+				$f->write($manual);
+			}
+			$f->close();
+		}
+		return $manual;
+	}
+
+	function setContentType($text) {
+		$this->out("Set content-type to ISO-8859-1");
+		$text = preg_replace('/content="text\/html; charset=UTF-8"/', 'content="text/html; charset=ISO-8859-1"', $text);
+
+		$this->generate('02.content-type', $text);
+		return $text;
+	}
+
+	function removeScriptLinkTags($text) {
+		$this->out("Removing <script> and <link> tags...");
+		$text = preg_replace('/<script .*>.*<\/script>/', '', $text);
+		$text = preg_replace('/<script .*\/>/', '', $text);
+		$text = preg_replace('/<link .*>.*<\/link>/', '', $text);
+		$text = preg_replace('/<link .*\/>/', '', $text);
+		$this->generate('03.remove-script-link-tags', $text);
+
+		return $text;
+	}
+
+	function removeFormattedCode($text) {
+		$this->out("Removing formatted code...");
+		$text = preg_replace('/<ol class="code">.*$<\/ol>/','', $text);
+		$text = preg_replace('/^.*<li class="even"><code>.*$/', '', $text);
+		$this->generate('04.remove-formatted-code', $text);
+
+		return $text;
+	}
+
+
+	function removeLines($text, $preg = true) {
+		$this->out("Removing google analytics script...");
+		/*
+		<script type="text/javascript">
+			var gaJsHost = (("https:" == document.location.protocol) ? "https://ssl." : "http://www.");
+			document.write(unescape("%3Cscript src='" + gaJsHost + "google-analytics.com/ga.js' type='text/javascript'%3E%3C/script%3E"));
+		</script>
+		<script type="text/javascript">
+			var pageTracker = _gat._getTracker("UA-743287-3");
+			pageTracker._initData();
+			pageTracker._trackPageview();
+		</script>
+		*/
+		if ($preg) {
+			$text = preg_replace('/<script type="text\/javascript">.+<\/script>/', '', $text);
+		} else {
+			// read into array
+			$array = explode("\n", $text);
+			$lines = count($array);
+			// remove last nine lines
+			for($i = 0; $i < 9; $i++) {
+				unset($array[$lines-3]);
+				$lines = count($array);
+			}
+			// reindex array
+			$array = array_values($array);
+			// return the text
+
+			$text = implode($array);
+		}
+		$this->generate('05.remove-lines', $text);
+		return $text;
+	}
+	
+	function rollingCleanup($text) {
+		$this->out("Rolling array cleanup...");
+		// read into array
+		$lines = explode("\n", $text);
+		// remove last nine lines
+		$i = 0;
+		$array = array();
+		foreach($lines as $key => $line) {
+			if (strlen(strstr($line, "title=\"Comments for "))>0) {
+				unset($lines[$i]);
+			} elseif(strlen(strstr($line, "Submit your thoughts"))>0) {
+				unset($lines[$i]);
+			} else {
+				$array[] = $line;
+			}
+			$i++;
+		}
 		return implode($array);
 	}
 
+	function removeNodeOptions($text) {
+		$this->out("Remove node options...");
+		$text = preg_replace('/<li><a href="\/history\/[\d]+\/[-\w]+" class="dialog">History<\/a><\/li>/', '', $text);
+		$text = preg_replace('/<li><a href="\/view\/[\d]+\/[-\w]+" class="dialog">View just this section<\/a><\/li>/', '', $text);
+
+		$this->generate('06.remove-node-options', $text);
+		return $text;
+	}
+
+	function removeComments($text) {
+		$this->out("Remove comments...");
+		$text = preg_replace('/<li><a href="\/comments\/index\/[\d]+" title="Comments for [\w\s\d]+" class="dialog">Comments \([\d]+\)<\/a><\/li>/', '', $text);
+
+		$this->generate('07.remove-comments', $text);
+		return $text;
+	}
+
 	function removeIllegalCharacters($text) {
-		$this->out("Replace illegal chars");
-		preg_replace('/—/', '-', $text);
-		preg_replace('/–/', '-', $text);
-		preg_replace('/’/', "\'", $text);
-		preg_replace('/\&lsquo;/', "\'", $text);
-		preg_replace('/\&rsquo;/', "\'", $text);
-		preg_replace('/“/', '"', $text);
-		preg_replace('/”/', '"', $text);
-		preg_replace('/‘/', "\'", $text);
-		preg_replace('/’/', "\'", $text);
-		preg_replace('/™/', "(tm)", $text);
-		preg_replace('/€/', '\&#8364;', $text);
-		preg_replace('/£/', '\&#163;', $text);
-		preg_replace('/¥/', '\&#165;', $text);
-		preg_replace('/…/', '...', $text);
-		preg_replace('/é/', '\&eacute;', $text);
-		preg_replace('/«/', '\&laquo;', $text);
-		preg_replace('/»/', '\&raquo;', $text);
+		$this->out("Replace illegal chars...");
+		$text = preg_replace('/—/', '-', $text);
+		$text = preg_replace('/–/', '-', $text);
+		$text = preg_replace('/’/', "'", $text);
+		$text = preg_replace('/&lsquo;/', "'", $text);
+		$text = preg_replace('/&rsquo;/', "'", $text);
+		$text = preg_replace('/“/', '"', $text);
+		$text = preg_replace('/”/', '"', $text);
+		$text = preg_replace('/‘/', "\'", $text);
+		$text = preg_replace('/’/', "\'", $text);
+		$text = preg_replace('/™/', "(tm)", $text);
+		$text = preg_replace('/€/', '&#8364;', $text);
+		$text = preg_replace('/£/', '&#163;', $text);
+		$text = preg_replace('/¥/', '&#165;', $text);
+		$text = preg_replace('/…/', '...', $text);
+		$text = preg_replace('/é/', '&eacute;', $text);
+		$text = preg_replace('/«/', '&laquo;', $text);
+		$text = preg_replace('/»/', '&raquo;', $text);
+
+		$this->generate('08.remove-illegal-characters', $text);
+		return $text;
+	}
+	
+	function cleanHeader($text) {
+		$this->out("Cleaning #header...");
+		$text = preg_replace('/<div id="container">.*<div id="body">/', '<div id="body">', $text);
+
+		$this->generate('09.remove-header', $text);
+		return $text;
+	}
+
+	function cleanFooter($text) {
+		$this->out("Cleaning #footer...");
+		$text = preg_replace('/<span class="prev">.*<\/span>/', '', $text);
+
+		$this->generate('10.remove-footer', $text);
+		return $text;
+	}
+
+	function removeManualLink($text) {
+		$this->out("Removing 1.1 manual link...");
+		$text = preg_replace('/<p><strong><a href="\/305\/the-manual">Click here for the CakePHP 1.1.x version of the manual<\/a><\/strong><\/p>/', '', $text);
+
+		$this->generate('11.remove-11-link', $text);
 		return $text;
 	}
 
 	function formatImages($text) {
-		$this->out("Format images");
-		preg_replace('/<img src="\/img\//', '<img src="', $text);
-		preg_replace('/src="typical-cake-request.gif"/', 'src="typical-cake-request.gif" width="500"', $text);
+		$this->out("Formatting images...");
+		$text = preg_replace('/<img src="\/img\//', '<img src="', $text);
+		$text = preg_replace('/src="typical-cake-request.gif"/', 'src="typical-cake-request.gif" width="500"', $text);
 
-		# preg_replace('src="http:\/\/book.cakephp.org\/img\/', 'src="', $manual);
+		$this->generate('12.format-images', $text);
 		return $text;
 	}
 
-	function tidyMarkup($text, $lawed = false) {
+	function tidyMarkup($text, $lawed = false, $second = false) {
 		if (function_exists('tidy_get_output')){
-			$this->out("Tidy markup");
+			$this->out("Tidying up markup...");
 			$config = array(
 				'indent'=> true,
 				'output-xml' => true,
@@ -176,86 +271,115 @@ class ManualShell extends Shell {
 			$law = new LawedHtml($tempZipPath);
 			return $law->htmLawed($text);
 		}
-		return $text;
-	}
 
-	function styleHeaders($text) {
-		$this->out("Remove headers links");
-		preg_replace('/(<a href="the-manual#[^"]*">)([#0-9.]+)(<\/a>)/', '\2', $text);
-		preg_replace('/\">#/', '">', $text);
-		
-		$this->out("Adjust headers");
-		preg_replace('/<h2 /', '<h1 ', $text);
-		preg_replace('/<\/h2/', '<\/h1', $text);
-
-		preg_replace('/<h3 /', '<h1 ', $text);
-		preg_replace('/<\/h3/', '<\/h1', $text);
-
-		preg_replace('/<h4 /', '<h2 ', $text);
-		preg_replace('/<\/h4/', '<\/h2', $text);
-
-		preg_replace('/<h5 /', '<h3 ', $text);
-		preg_replace('/<\/h5/', '<\/h3', $text);
-
-		preg_replace('/<h6 /', '<h4 ', $text);
-		preg_replace('/<\/h6/', '<\/h4', $text);
-		return $text;
-	}
-
-	function styleTables($text) {
-		$this->out("Style tables");
-		preg_replace('/<table.*>/', '<table border="1px" bordercolor="#dddddd" cellspacing="0" cellpadding="4">', $text);
-		preg_replace('/<\/table>/', '<\/table><br \/>', $text);
-		preg_replace('/<td><\/td>/', '<td>\&nbsp;<\/td>', $text);
-		preg_replace('/<th[^>]*>/', '<th bgcolor="#f2f2f2">', $text);
-		return $text;
-	}
-
-	function styleDefinitionLists($text) {
-		$this->out("Style definition lists");
-		preg_replace('/<dt>/', '<dt><strong>', $text);
-		preg_replace('/<\/dt>/', '<\/strong><\/dt>', $text);
-		return $text;
-	}
-
-	function styleCodeBlocks($text) {
-		$this->out("Style code blocks");
-		preg_replace('/<pre class="code">/', '<table border="1px" bordercolor="#dddddd" width="100%" bgcolor="#f9f9f9" cellpadding="5"><tr><td><pre class="code">', $text);
-		preg_replace('/<pre class="plain">/', '<table border="1px" bordercolor="#dddddd" width="100%" bgcolor="#f2f2f2" cellpadding="5"><tr><td><pre class="plain">', $text);
-		preg_replace('/<\/pre>/', '<\/pre><\/td><\/tr><\/table>\&nbsp;', $text);
-		return $text;
-	}
-
-	function formatForScreen($text) {
-		if (false) {
-			preg_replace('/<pre class="shell">/', '<table border="1px" bordercolor="#dddddd" width="100%" bgcolor="#000000" cellpadding="5"><tr><td><font color="#ffffff"><pre class="shell"><strong>', $text);
+		if ($second) {
+			$this->generate('08.tidyMarkup2', $text);
 		} else {
-			preg_replace('/<pre class="shell">/', '<table border="1px" bordercolor="#dddddd" width="100%" bgcolor="#dddddd" cellpadding="5"><tr><td><font color="#000000"><pre class="shell"><strong>', $text);
+			$this->generate('08.tidyMarkup', $text);
+			
 		}
 		return $text;
 	}
 
-	function styleInlineCode($text) {
-		$this->out("Style inline code");
-		preg_replace('/<kbd>/', '<kbd><font size="2">', $text);
-		preg_replace('/<\/kbd>/', '<\/font><\/kbd>', $text);
-		preg_replace('/<code>/', '<code><font size="2">', $text);
-		preg_replace('/<\/code>/', '<\/font><\/code>', $text);
-		return $text;
-	}
-	
-	function styleWarnings($text) {
-		$this->out("Formatting notes");
-		preg_replace('/(<p class="note">)(.*)(<\/p>)/', '<table width="100%" bgcolor="#ffffbb" bordercolor="#cccc66" cellpadding="10"><tr><td><table><tr><td width="5%"><img width="22" height="22" src="info.jpg"><\/td><td width="95%"><font size="2">\2<\/font><\/td><\/tr><\/table><\/td><\/tr><\/table><br>', $text);
-		preg_replace('/(<div class="note">)(.*)(<\/div>)/', '<table width="100%" bgcolor="#ffffbb" bordercolor="#cccc66" cellpadding="10"><tr><td><table><tr><td width="5%"><img width="22" height="22" src="info.jpg"><\/td><td width="95%"><font size="2">\2<\/font><\/td><\/tr><\/table><\/td><\/tr><\/table><br>', $text);
-		preg_replace('/(<p class="warning">)(.*)(<\/p>)/', '<table width="100%" bgcolor="#ffeeee" bordercolor="#990000" cellpadding="10"><tr><td><table><tr><td width="5%"><img width="22" height="22" src="warn.jpg"><\/td><td width="95%"><font size="2">\2<\/font><\/td><\/tr><\/table><\/td><\/tr><\/table><br>', $text);
-		preg_replace('/(<div class="warning">)(.*)(<\/div>)/', '<table width="100%" bgcolor="#ffeeee" bordercolor="#990000" cellpadding="10"><tr><td><table><tr><td width="5%"><img width="22" height="22" src="warn.jpg"><\/td><td width="95%"><font size="2">\2<\/font><\/td><\/tr><\/table><\/td><\/tr><\/table><br>', $text);
+	function styleHeaders($text) {
+		$this->out("Removing headers links...");
+		$text = preg_replace('/(<a href="the-manual#^"*">)([#0-9.]+)(<\/a>)/', '\2', $text);
+		$text = preg_replace('/\">#/', '">', $text);
+		
+		$this->out("Adjusting headers...");
+		$text = preg_replace('/<h2 /', '<h1 ', $text);
+		$text = preg_replace('/<\/h2/', '</h1', $text);
 
+		$text = preg_replace('/<h3 /', '<h1 ', $text);
+		$text = preg_replace('/<\/h3/', '</h1', $text);
+
+		$text = preg_replace('/<h4 /', '<h2 ', $text);
+		$text = preg_replace('/<\/h4/', '</h2', $text);
+
+		$text = preg_replace('/<h5 /', '<h3 ', $text);
+		$text = preg_replace('/<\/h5/', '</h3', $text);
+
+		$text = preg_replace('/<h6 /', '<h4 ', $text);
+		$text = preg_replace('/<\/h6/', '</h4', $text);
+
+		$this->generate('13.style-headers', $text);
 		return $text;
 	}
-	
+
+	function styleTables($text) {
+		$this->out("Styling tables...");
+		$text = preg_replace('/<table.*>/', '<table border="1px" bordercolor="#dddddd" cellspacing="0" cellpadding="4">', $text);
+		$text = preg_replace('/<\/table>/', '</table><br />', $text);
+		$text = preg_replace('/<td><\/td>/', '<td>&nbsp;</td>', $text);
+		$text = preg_replace('/<th^>*>/', '<th bgcolor="#f2f2f2">', $text);
+
+		$this->generate('14.style-tables', $text);
+		return $text;
+	}
+
+	function styleDefinitionLists($text) {
+		$this->out("Styling definition lists...");
+		$text = preg_replace('/<dt>/', '<dt><strong>', $text);
+		$text = preg_replace('/<\/dt>/', '</strong></dt>', $text);
+
+		$this->generate('15.style-dls', $text);
+		return $text;
+	}
+
+	function styleCodeBlocks($text) {
+		$this->out("Styling code blocks...");
+		$text = preg_replace('/<pre class="code">/', '<table border="1px" bordercolor="#dddddd" width="100%" bgcolor="#f9f9f9" cellpadding="5"><tr><td><pre class="code">', $text);
+		$text = preg_replace('/<pre class="plain">/', '<table border="1px" bordercolor="#dddddd" width="100%" bgcolor="#f2f2f2" cellpadding="5"><tr><td><pre class="plain">', $text);
+		$text = preg_replace('/<\/pre>/', '</pre></td></tr></table>&nbsp;', $text);
+
+		$this->generate('16.style-codeblocks', $text);
+		return $text;
+	}
+
+	function formatForScreen($text) {
+		$this->out("Formatting for screen...");
+		if (false) {
+			$text = preg_replace('/<pre class="shell">/', '<table border="1px" bordercolor="#dddddd" width="100%" bgcolor="#000000" cellpadding="5"><tr><td><font color="#ffffff"><pre class="shell"><strong>', $text);
+		} else {
+			$text = preg_replace('/<pre class="shell">/', '<table border="1px" bordercolor="#dddddd" width="100%" bgcolor="#dddddd" cellpadding="5"><tr><td><font color="#000000"><pre class="shell"><strong>', $text);
+		}
+
+		$this->generate('17.format-screen', $text);
+		return $text;
+	}
+
+	function styleInlineCode($text) {
+		$this->out("Styling inline code...");
+		$text = preg_replace('/<kbd>/', '<kbd><font size="2">', $text);
+		$text = preg_replace('/<\/kbd>/', '</font></kbd>', $text);
+		$text = preg_replace('/<code>/', '<code><font size="2">', $text);
+		$text = preg_replace('/<\/code>/', '</font></code>', $text);
+
+		$this->generate('18.style-inline-code', $text);
+		return $text;
+	}
+
+	function styleMethods($text) {
+		$this->out("Style methods");
+		$text = preg_replace('/ class="method">/', ' class="method"><strong><code><font size="2">', $text);
+
+		$this->generate('19.style-methods', $text);
+		return $text;
+	}
+
+	function styleWarnings($text) {
+		$this->out("Formatting notes...");
+		$text = preg_replace('/(<p class="note">)(.*)(<\/p>)/', '<table width="100%" bgcolor="#ffffbb" bordercolor="#cccc66" cellpadding="10"><tr><td><table><tr><td width="5%"><img width="22" height="22" src="info.jpg"></td><td width="95%"><font size="2">2</font></td></tr></table></td></tr></table><br>', $text);
+		$text = preg_replace('/(<div class="note">)(.*)(<\/div>)/', '<table width="100%" bgcolor="#ffffbb" bordercolor="#cccc66" cellpadding="10"><tr><td><table><tr><td width="5%"><img width="22" height="22" src="info.jpg"></td><td width="95%"><font size="2">2</font></td></tr></table></td></tr></table><br>', $text);
+		$text = preg_replace('/(<p class="warning">)(.*)(<\/p>)/', '<table width="100%" bgcolor="#ffeeee" bordercolor="#990000" cellpadding="10"><tr><td><table><tr><td width="5%"><img width="22" height="22" src="warn.jpg"></td><td width="95%"><font size="2">2</font></td></tr></table></td></tr></table><br>', $text);
+		$text = preg_replace('/(<div class="warning">)(.*)(<\/div>)/', '<table width="100%" bgcolor="#ffeeee" bordercolor="#990000" cellpadding="10"><tr><td><table><tr><td width="5%"><img width="22" height="22" src="warn.jpg"></td><td width="95%"><font size="2">2</font></td></tr></table></td></tr></table><br>', $text);
+
+		$this->generate('20.style-warnings', $text);
+		return $text;
+	}
+
 	function highlight($text){
-		$this->out("Highlighting");
+		$this->out("Highlighting...");
 		$start = $end = 0;
 		$replacements = array();
 		// $startMark = '&lt;?';
@@ -299,6 +423,8 @@ class ManualShell extends Shell {
 		}
 		$text = str_replace('<pre class="code"><br />', '<pre class="code">',  $text);
 		$text = str_replace("?&gt;<br /></font>\n</pre>", "?&gt;</font></pre>",  $text);
+
+		$this->generate('21.highlight', $text);
 		return $text;
 	}
 }
