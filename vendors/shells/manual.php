@@ -1,4 +1,8 @@
 <?php
+function strstrb($h,$n){
+    return array_shift(explode($n,$h,2));
+}
+
 /**
  * Manual Shell
  * 
@@ -79,7 +83,7 @@ class ManualShell extends Shell {
           $style_node   = simplexml_import_dom($node)->asXML();
         }
 
-        $style_uri  = strstr(strstr($style_node, '/css/'), '" title', true);
+        $style_uri  = strstrb(strstr($style_node, '/css/'), '" title');
         $stylesheet = $this->retrieve("http://book.cakephp.org{$style_uri}");
         $stylesheet = str_replace('url(../img/', 'url(http://book.cakephp.org/img/', $stylesheet);
         $stylesheet = str_replace('url(images/', 'url(http://book.cakephp.org/css/images/', $stylesheet);
@@ -184,11 +188,18 @@ style;
     }
 
     function pdf_write($manual) {
-        App::import('Vendor', 'Manual.WKPDF', array('file' => 'wkpdf.php'));
-        $pdf = new WKPDF(TMP);
-        $pdf->set_html($manual);
-        $pdf->render();
-        return $pdf->output(WKPDF::$PDF_SAVEFILE, TMP . 'manual.pdf');
+		file_put_contents('/tmp/manual.html', $manual);
+		ini_set('memory_limit', '512M');
+		App::import('Vendor', 'dompdf', array('file' => 'dompdf-0.6' . DS . 'dompdf_config.inc.php'));
+		$pdf = new DOMPDF();
+		$pdf->load_html($manual);
+		$pdf->set_paper('letter', 'portrait');	
+		$pdf->render();
+	
+		# Output generated PDF
+		//strlen();
+		return file_put_contents('/tmp/manual.pdf', $pdf->output());
+		//return $pdf->output(WKPDF::$PDF_SAVEFILE, TMP . 'manual.pdf');
     }
 
 /**
